@@ -7,6 +7,7 @@ using CoffeBot.Services;
 using DotNetEnv;
 // DO NOT import CoffeBot.Endpoints broadly
 using ChatEndpoints = CoffeBot.Endpoints.ChatEndpoints;
+using KickApiEndpoints = CoffeBot.Endpoints.KickProxyEndpoints;
 
 Env.Load();
 
@@ -61,6 +62,7 @@ MeEndpoints.MapUserEndpoints(app);
 
 // Bring Chat from legacy with the alias:
 ChatEndpoints.MapChatEndpoints(app);
+KickApiEndpoints.MapKickProxyEndpoints(app);
 
 var listenUrl = Environment.GetEnvironmentVariable("APP__ListenUrl");
 if (!string.IsNullOrWhiteSpace(listenUrl)) app.Run(listenUrl);

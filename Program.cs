@@ -37,7 +37,7 @@ builder.Services.AddAuthFeature();
 builder.Services.AddUsersFeature();
 
 // If Chat DI isn’t included in the features yet:
-builder.Services.AddScoped<IChatApiClient, ChatApiClient>();
+builder.Services.AddSingleton<IChatApiClient, ChatApiClient>();
 builder.Services.AddSingleton<IChatListener, ChatListener>();
 builder.Services.AddScoped<IEventSubClient, EventSubClient>();
 builder.Services.AddSingleton<KickWebhookVerifier>();

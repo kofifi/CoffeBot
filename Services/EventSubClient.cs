@@ -1,5 +1,6 @@
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Text.Json;
 using CoffeBot.Abstractions;
 using CoffeBot.Options;
 using Microsoft.Extensions.Options;
@@ -17,25 +18,75 @@ public sealed class EventSubClient : IEventSubClient
         _kick = kick.Value;
     }
 
+    /// <summary>
+    /// Subscribes to chat message events for the broadcaster (channel) via webhook.
+    /// Requires the access token to have 'events:subscribe' scope.
+    /// </summary>
     public async Task SubscribeToChatAsync(
         string accessToken,
         int channelId,
-        string callbackUrl,
-        string secret,
+        string _callbackUrl, // not used by Kick in the request payload
+        string _secret,      // not used by Kick in the request payload
         CancellationToken ct)
     {
-        _http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+        using var req = new HttpRequestMessage(
+            HttpMethod.Post,
+            $"{_kick.ApiBase.TrimEnd('/')}/public/v1/events/subscriptions");
 
-        var url = $"{_kick.ApiBase.TrimEnd('/')}/public/v1/events/subscribe";
-        var payload = new
+        req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+
+        var body = new
         {
-            type = "channel.chat.message",
-            broadcaster_user_id = channelId,
-            callback = callbackUrl,
-            secret
+            events = new[]
+            {
+                new { name = "chat.message.sent", version = 1 } // add more events here if needed
+            },
+            method = "webhook",
+            broadcaster_user_id = channelId
         };
 
-        using var resp = await _http.PostAsJsonAsync(url, payload, ct);
+        req.Content = JsonContent.Create(body);
+
+        using var resp = await _http.SendAsync(req, ct);
+        if (!resp.IsSuccessStatusCode)
+        {
+            var text = await resp.Content.ReadAsStringAsync(ct);
+            throw new HttpRequestException(
+                $"Subscribe failed ({(int)resp.StatusCode} {resp.ReasonPhrase}). Body: {text}");
+        }
+    }
+
+    // ------- Optional helpers (can add to your interface if you like) -------
+
+    public async Task<string> ListSubscriptionsAsync(string accessToken, CancellationToken ct)
+    {
+        using var req = new HttpRequestMessage(
+            HttpMethod.Get,
+            $"{_kick.ApiBase.TrimEnd('/')}/public/v1/events/subscriptions");
+        req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+
+        using var resp = await _http.SendAsync(req, ct);
+        var text = await resp.Content.ReadAsStringAsync(ct);
         resp.EnsureSuccessStatusCode();
+        return text; // or deserialize to a record
+    }
+
+    public async Task DeleteSubscriptionsAsync(string accessToken, CancellationToken ct, params string[] ids)
+    {
+        if (ids is null || ids.Length == 0) return;
+
+        var query = string.Join("&", ids.Select(id => $"id={Uri.EscapeDataString(id)}"));
+        var url = $"{_kick.ApiBase.TrimEnd('/')}/public/v1/events/subscriptions?{query}";
+
+        using var req = new HttpRequestMessage(HttpMethod.Delete, url);
+        req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+
+        using var resp = await _http.SendAsync(req, ct);
+        if (!resp.IsSuccessStatusCode)
+        {
+            var text = await resp.Content.ReadAsStringAsync(ct);
+            throw new HttpRequestException(
+                $"Delete failed ({(int)resp.StatusCode} {resp.ReasonPhrase}). Body: {text}");
+        }
     }
 }

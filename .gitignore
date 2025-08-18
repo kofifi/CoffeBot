@@ -1,0 +1,58 @@
+# --- Build / artifacts ---
+bin/
+obj/
+[Bb]uild/
+[Ll]ogs/
+TestResults/
+*.nupkg
+*.snupkg
+*.code-workspace
+*.cache/
+*.tmp
+*.tmp.*
+*.log
+
+# --- User secrets / env ---
+.env
+.env.*
+secrets.json
+
+# If you keep appsettings.*.Local.json for dev-only overrides:
+appsettings.*.Local.json
+
+# --- IDEs ---
+# Rider / ReSharper
+.idea/
+*.sln.iml
+riderModule.iml
+_ReSharper.*
+/_ReSharper.Caches/
+
+# VS / VS Code
+.vs/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+*.user
+*.suo
+
+# --- Tools / coverage ---
+/packages/
+.nuget/
+coverage/
+coverage.*.xml
+*.coverage
+*.coveragexml
+
+# --- OS noise ---
+.DS_Store
+Thumbs.db
+ehthumbs.db
+.designer.*
+Icon?
+*.swp
+*.swo
+
+# --- Containers / misc ---
+*.pid
+*.seed

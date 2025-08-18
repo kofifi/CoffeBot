@@ -1,0 +1,6 @@
+﻿services:
+  coffebot:
+    image: coffebot
+    build:
+      context: .
+      dockerfile: Dockerfile

@@ -1,6 +1,8 @@
-﻿// Services/UserApiClient.cs
+// Services/UserApiClient.cs
 using System.Net.Http.Headers;
+using System.Text.Json;
 using CoffeBot.Abstractions;
+using CoffeBot.Models;
 using CoffeBot.Options;
 using Microsoft.Extensions.Options;
 
@@ -24,4 +26,23 @@ public sealed class UserApiClient : IUserApiClient
         var body = await resp.Content.ReadAsStringAsync(ct);
         return ((int)resp.StatusCode, body);
     }
+
+    public async Task<CurrentUserDto> GetCurrentAsync(string accessToken, CancellationToken ct)
+    {
+        var (_, body) = await GetCurrentRawAsync(accessToken, ct);
+        using var doc = JsonDocument.Parse(body);
+        var root = doc.RootElement;
+        var first = root.GetProperty("data")[0];
+        var id = first.TryGetProperty("user_id", out var idEl) ? idEl.GetInt32() : 0;
+        string? username = null;
+        if (first.TryGetProperty("username", out var nameEl))
+            username = nameEl.GetString();
+        return new CurrentUserDto
+        {
+            Id = id,
+            Username = username,
+            Raw = root.Clone()
+        };
+    }
 }
+

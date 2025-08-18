@@ -6,21 +6,15 @@ using CoffeBot.Options;
 using CoffeBot.Services;
 using Microsoft.AspNetCore.Http.Extensions;
 using DotNetEnv;
+using CoffeBot.Endpoints;
 
-// 1) Load .env BEFORE building the host, so env vars are visible to Configuration
+
 Env.Load();
 
-// 2) Build the host (appsettings.json -> appsettings.{env}.json -> Environment Variables)
-//    Because we loaded .env already, its vars are now normal environment variables.
 var builder = WebApplication.CreateBuilder(args);
-
-// 3) (Optional) also add environment variables provider explicitly; harmless if already present
 builder.Configuration.AddEnvironmentVariables();
 
-// 4) Bind KickOptions from Configuration (env overrides appsettings automatically)
 builder.Services.Configure<KickOptions>(builder.Configuration.GetSection("Kick"));
-
-// 5) Http clients, session, DI as before
 builder.Services.AddKickHttpClients();
 
 builder.Services.AddDistributedMemoryCache();
@@ -34,17 +28,27 @@ builder.Services.AddSession(o =>
 builder.Services.AddCoreServices();
 builder.Services.AddAuthFeature();
 builder.Services.AddUsersFeature();
+builder.Services.AddSingleton<IPkceService, PkceService>();
+builder.Services.AddSingleton<IStateService, StateService>();
+builder.Services.AddSingleton<IAuthUrlBuilder, AuthUrlBuilder>();
+builder.Services.AddSingleton<ITokenStore, SessionTokenStore>();
+builder.Services.AddScoped<ITokenService, TokenService>();
+builder.Services.AddScoped<IUserApiClient, UserApiClient>();
+builder.Services.AddScoped<IChatApiClient, ChatApiClient>();
 
 var app = builder.Build();
 app.UseSession();
 
-// Home
+// Strona startowa (opcjonalnie tu zostaje)
+// Program.cs (your current home)
 app.MapGet("/", (HttpContext ctx) =>
 {
     var (access, _) = ctx.RequestServices.GetRequiredService<ITokenStore>().Read(ctx);
     var meUrl = UriHelper.BuildAbsolute(ctx.Request.Scheme, ctx.Request.Host, "/users/me");
     var loginUrl = UriHelper.BuildAbsolute(ctx.Request.Scheme, ctx.Request.Host, "/login");
     var logoutUrl = UriHelper.BuildAbsolute(ctx.Request.Scheme, ctx.Request.Host, "/logout");
+    var chatUrl = UriHelper.BuildAbsolute(ctx.Request.Scheme, ctx.Request.Host, "/chat");
+
 
     var isAuth = access is not null;
     return Results.Content($$"""
@@ -54,14 +58,16 @@ app.MapGet("/", (HttpContext ctx) =>
       <p><a href="{{loginUrl}}">Login</a> |
          <a href="{{meUrl}}">/users/me</a> |
          <a href="{{logoutUrl}}">Logout</a></p>
+         <a href="{{chatUrl}}">/chat</a></p>
     </body></html>
     """, "text/html");
 });
 
 app.MapAuthEndpoints();
 app.MapUserEndpoints();
+app.MapChatEndpoints();
 
-// 6) Respect APP__ListenUrl if provided; otherwise just Run() and let Kestrel config apply
+
 var listenUrl = Environment.GetEnvironmentVariable("APP__ListenUrl");
 if (!string.IsNullOrWhiteSpace(listenUrl))
     app.Run(listenUrl);

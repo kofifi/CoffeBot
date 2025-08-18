@@ -24,7 +24,6 @@ public static class EventSubEndpoints
             HttpContext ctx,
             IEventSubClient client,
             IUserApiClient users,
-            IOptions<KickEventOptions> opt,
             ITokenStore store,
             CancellationToken ct) =>
         {
@@ -32,10 +31,9 @@ public static class EventSubEndpoints
             if (access is null) return Results.Unauthorized();
 
             var me = await users.GetCurrentAsync(access, ct);
-            var cfg = opt.Value;
             try
             {
-                await client.SubscribeToChatAsync(access, me.Id, cfg.CallbackUrl, cfg.WebhookSecret, ct);
+                await client.SubscribeToChatAsync(access, me.Id, ct);
                 return Results.Ok(new { subscribed = true });
             }
             catch (HttpRequestException ex)
@@ -57,7 +55,7 @@ public static class EventSubEndpoints
         {
             using var reader = new StreamReader(req.Body);
             var body = await reader.ReadToEndAsync();
-            if (!verifier.Verify(req, body)) return Results.Unauthorized();
+            if (!await verifier.VerifyAsync(req, body, ct)) return Results.Unauthorized();
 
             using var doc = JsonDocument.Parse(body);
             var root = doc.RootElement;

@@ -34,6 +34,7 @@ public sealed class EventSubClient : IEventSubClient
             $"{_kick.ApiBase.TrimEnd('/')}/public/v1/events/subscriptions");
 
         req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+        req.Headers.Add("Client-Id", _kick.ClientId);
 
         var body = new
         {
@@ -64,6 +65,7 @@ public sealed class EventSubClient : IEventSubClient
             HttpMethod.Get,
             $"{_kick.ApiBase.TrimEnd('/')}/public/v1/events/subscriptions");
         req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+        req.Headers.Add("Client-Id", _kick.ClientId);
 
         using var resp = await _http.SendAsync(req, ct);
         var text = await resp.Content.ReadAsStringAsync(ct);
@@ -80,6 +82,7 @@ public sealed class EventSubClient : IEventSubClient
 
         using var req = new HttpRequestMessage(HttpMethod.Delete, url);
         req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+        req.Headers.Add("Client-Id", _kick.ClientId);
 
         using var resp = await _http.SendAsync(req, ct);
         if (!resp.IsSuccessStatusCode)

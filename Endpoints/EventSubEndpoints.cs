@@ -61,7 +61,7 @@ public static class EventSubEndpoints
                 if (content.StartsWith("!coffebot", StringComparison.OrdinalIgnoreCase))
                 {
                     var cfg = opt.Value;
-                    var reply = new ChatSendCommand("☕ CoffeeBot here!", "user", cfg.ChannelId);
+                    var reply = new ChatSendCommand("Im coffe bot what can i help you?", "user", cfg.ChannelId);
                     if (!string.IsNullOrWhiteSpace(cfg.BotAccessToken))
                         await chatApi.SendAsync(cfg.BotAccessToken, reply, ct);
                 }

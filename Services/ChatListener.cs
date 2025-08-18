@@ -141,7 +141,7 @@ public sealed class ChatListener : IChatListener, IDisposable
         {
             await _chatApi.SendAsync(
                 _accessToken,
-                new ChatSendCommand("☕ CoffeeBot here! Type !coffebot help for commands.", "user", _channelId, null),
+                new ChatSendCommand("Im coffe bot what can i help you?", "user", _channelId, null),
                 CancellationToken.None);
         }
         catch

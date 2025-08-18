@@ -67,8 +67,17 @@ public sealed class ChatListener : IChatListener, IDisposable
             {
                 _ws = new ClientWebSocket();
                 _ws.Options.SetRequestHeader("Authorization", $"Bearer {_accessToken}");
-                var uri = new Uri($"{_opt.WebSocketUrl}?channel_id={_channelId}");
+                var uri = new Uri(_opt.WebSocketUrl);
                 await _ws.ConnectAsync(uri, ct);
+
+                var sub = new
+                {
+                    @event = "pusher:subscribe",
+                    data = new { channel = $"channel.{_channelId}" }
+                };
+                var subJson = JsonSerializer.Serialize(sub);
+                var subBytes = Encoding.UTF8.GetBytes(subJson);
+                await _ws.SendAsync(new ArraySegment<byte>(subBytes), WebSocketMessageType.Text, true, ct);
 
                 var buffer = new byte[64 * 1024];
                 var sb = new StringBuilder();
@@ -84,7 +93,7 @@ public sealed class ChatListener : IChatListener, IDisposable
 
                     var json = sb.ToString();
                     sb.Clear();
-                    HandleIncoming(json);
+                    await HandleIncomingAsync(json, ct);
                 }
 
                 backoff = TimeSpan.FromSeconds(1);
@@ -111,16 +120,33 @@ public sealed class ChatListener : IChatListener, IDisposable
         }
     }
 
-    private void HandleIncoming(string json)
+    private async Task HandleIncomingAsync(string json, CancellationToken ct)
     {
         try
         {
             using var doc = JsonDocument.Parse(json);
             var root = doc.RootElement;
-            if (!root.TryGetProperty("type", out var typeEl)) return;
-            if (!string.Equals(typeEl.GetString(), "message", StringComparison.OrdinalIgnoreCase)) return;
-            if (!root.TryGetProperty("data", out var data)) return;
-            if (!data.TryGetProperty("content", out var contentEl)) return;
+            if (!root.TryGetProperty("event", out var evtEl)) return;
+            var evt = evtEl.GetString();
+
+            if (evt == "pusher:ping")
+            {
+                var pong = JsonSerializer.Serialize(new { @event = "pusher:pong" });
+                var bytes = Encoding.UTF8.GetBytes(pong);
+                if (_ws is { State: WebSocketState.Open })
+                    await _ws.SendAsync(new ArraySegment<byte>(bytes), WebSocketMessageType.Text, true, ct);
+                return;
+            }
+
+            if (evt != "channel.chat.message") return;
+
+            if (!root.TryGetProperty("data", out var dataEl)) return;
+            var payloadJson = dataEl.GetString();
+            if (string.IsNullOrEmpty(payloadJson)) return;
+
+            using var payloadDoc = JsonDocument.Parse(payloadJson);
+            var payload = payloadDoc.RootElement;
+            if (!payload.TryGetProperty("content", out var contentEl)) return;
 
             var content = contentEl.GetString() ?? string.Empty;
             if (content.StartsWith("!coffebot", StringComparison.OrdinalIgnoreCase))

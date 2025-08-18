@@ -5,6 +5,8 @@ using CoffeBot.Http;
 using CoffeBot.Options;
 using CoffeBot.Services;
 using DotNetEnv;
+using Microsoft.AspNetCore.HttpLogging;
+using Microsoft.Extensions.Logging;
 // DO NOT import CoffeBot.Endpoints broadly
 using ChatEndpoints = CoffeBot.Endpoints.ChatEndpoints;
 using KickApiEndpoints = CoffeBot.Endpoints.KickProxyEndpoints;
@@ -15,6 +17,22 @@ Env.Load();
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Configuration.AddEnvironmentVariables();
+
+builder.Logging.ClearProviders();
+builder.Logging.AddSimpleConsole(options =>
+{
+    options.IncludeScopes = true;
+    options.SingleLine = true;
+    options.TimestampFormat = "HH:mm:ss ";
+});
+builder.Logging.SetMinimumLevel(LogLevel.Debug);
+
+builder.Services.AddHttpLogging(o =>
+{
+    o.LoggingFields = HttpLoggingFields.All;
+    o.RequestBodyLogLimit = 4096;
+    o.ResponseBodyLogLimit = 4096;
+});
 
 // Options & Http clients
 builder.Services.Configure<KickOptions>(builder.Configuration.GetSection("Kick"));
@@ -43,6 +61,7 @@ builder.Services.AddScoped<IEventSubClient, EventSubClient>();
 builder.Services.AddSingleton<KickWebhookVerifier>();
 
 var app = builder.Build();
+app.UseHttpLogging();
 app.UseSession();
 
 // Home

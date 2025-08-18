@@ -25,8 +25,6 @@ public sealed class EventSubClient : IEventSubClient
     public async Task SubscribeToChatAsync(
         string accessToken,
         int channelId,
-        string _callbackUrl, // not used by Kick in the request payload
-        string _secret,      // not used by Kick in the request payload
         CancellationToken ct)
     {
         using var req = new HttpRequestMessage(

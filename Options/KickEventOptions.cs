@@ -2,9 +2,6 @@ namespace CoffeBot.Options;
 
 public sealed class KickEventOptions
 {
-    // Secret used to verify webhook signatures
-    public string WebhookSecret { get; set; } = string.Empty;
-
     // Absolute callback URL registered with Kick when subscribing
     public string CallbackUrl { get; set; } = string.Empty;
 

@@ -1,3 +1,4 @@
+using System.Net.Http;
 using System.Security.Cryptography;
 using System.Text;
 using CoffeBot.Options;
@@ -7,30 +8,47 @@ namespace CoffeBot.Services;
 
 public sealed class KickWebhookVerifier
 {
-    private readonly KickEventOptions _opt;
+    private readonly HttpClient _http;
+    private readonly KickOptions _kick;
+    private RSA? _publicKey;
 
-    public KickWebhookVerifier(IOptions<KickEventOptions> opt)
+    public KickWebhookVerifier(IHttpClientFactory factory, IOptions<KickOptions> kick)
     {
-        _opt = opt.Value;
+        _http = factory.CreateClient("kick-api");
+        _kick = kick.Value;
     }
 
-    public bool Verify(HttpRequest req, string body)
+    private async Task<RSA> GetPublicKeyAsync(CancellationToken ct)
     {
-        if (!_opt.WebhookSecret.Any()) return false;
+        if (_publicKey is not null) return _publicKey;
+        var pem = await _http.GetStringAsync($"{_kick.ApiBase.TrimEnd('/')}/public/v1/public-key", ct);
+        var rsa = RSA.Create();
+        rsa.ImportFromPem(pem);
+        _publicKey = rsa;
+        return rsa;
+    }
 
-        // Kick signs each webhook request using the event id, timestamp and body
-        if (!req.Headers.TryGetValue("X-Kick-Signature", out var sigValues)) return false;
-        if (!req.Headers.TryGetValue("X-Kick-Event-Id", out var idValues)) return false;
-        if (!req.Headers.TryGetValue("X-Kick-Timestamp", out var tsValues)) return false;
+    public async Task<bool> VerifyAsync(HttpRequest req, string body, CancellationToken ct = default)
+    {
+        if (!req.Headers.TryGetValue("Kick-Event-Signature", out var sigValues)) return false;
+        if (!req.Headers.TryGetValue("Kick-Event-Message-Id", out var idValues)) return false;
+        if (!req.Headers.TryGetValue("Kick-Event-Message-Timestamp", out var tsValues)) return false;
 
-        var payload = $"{idValues}{tsValues}{body}";
-        using var hmac = new HMACSHA256(Encoding.UTF8.GetBytes(_opt.WebhookSecret));
-        var hash = hmac.ComputeHash(Encoding.UTF8.GetBytes(payload));
-        var expected = Convert.ToHexString(hash).ToLowerInvariant();
-        var received = sigValues.ToString().Trim().ToLowerInvariant();
+        var payload = $"{idValues}.{tsValues}.{body}";
+        var rsa = await GetPublicKeyAsync(ct);
 
-        return CryptographicOperations.FixedTimeEquals(
-            Encoding.UTF8.GetBytes(expected),
-            Encoding.UTF8.GetBytes(received));
+        byte[] signature;
+        try
+        {
+            signature = Convert.FromBase64String(sigValues.ToString());
+        }
+        catch (FormatException)
+        {
+            return false;
+        }
+
+        var hash = SHA256.HashData(Encoding.UTF8.GetBytes(payload));
+
+        return rsa.VerifyHash(hash, signature, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
     }
 }

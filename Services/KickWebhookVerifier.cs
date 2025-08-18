@@ -1,6 +1,7 @@
 using System.Net.Http;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using CoffeBot.Options;
 using Microsoft.Extensions.Options;
 
@@ -21,7 +22,25 @@ public sealed class KickWebhookVerifier
     private async Task<RSA> GetPublicKeyAsync(CancellationToken ct)
     {
         if (_publicKey is not null) return _publicKey;
-        var pem = await _http.GetStringAsync($"{_kick.ApiBase.TrimEnd('/')}/public/v1/public-key", ct);
+        var content = await _http.GetStringAsync($"{_kick.ApiBase.TrimEnd('/')}/public/v1/public-key", ct);
+        string pem = content;
+
+        try
+        {
+            using var doc = JsonDocument.Parse(content);
+            if (doc.RootElement.TryGetProperty("public_key", out var pk) ||
+                doc.RootElement.TryGetProperty("publicKey", out pk))
+            {
+                var value = pk.GetString();
+                if (!string.IsNullOrWhiteSpace(value))
+                    pem = value;
+            }
+        }
+        catch (JsonException)
+        {
+            // Response was not JSON; assume it already contains PEM formatted key
+        }
+
         var rsa = RSA.Create();
         rsa.ImportFromPem(pem);
         _publicKey = rsa;

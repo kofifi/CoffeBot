@@ -3,7 +3,7 @@ using CoffeBot.Options;
 using Microsoft.AspNetCore.Http.Extensions;
 using Microsoft.Extensions.Options;
 
-namespace CoffeBot.Auth;
+namespace CoffeBot.Services;
 
 public sealed class AuthUrlBuilder : IAuthUrlBuilder
 {

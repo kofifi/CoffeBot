@@ -1,6 +1,6 @@
 ﻿using CoffeBot.Abstractions;
 
-namespace CoffeBot.Auth;
+namespace CoffeBot.Services;
 
 public sealed class StateService : IStateService
 {

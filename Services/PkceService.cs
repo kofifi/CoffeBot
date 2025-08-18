@@ -2,7 +2,7 @@
 using System.Text;
 using CoffeBot.Abstractions;
 
-namespace CoffeBot.Auth;
+namespace CoffeBot.Services;
 
 public sealed class PkceService : IPkceService
 {

@@ -8,6 +8,8 @@ using DotNetEnv;
 // DO NOT import CoffeBot.Endpoints broadly
 using ChatEndpoints = CoffeBot.Endpoints.ChatEndpoints;
 using KickApiEndpoints = CoffeBot.Endpoints.KickProxyEndpoints;
+using ChatListenEndpoints = CoffeBot.Endpoints.ChatListenEndpoints;
+using EventSubEndpoints = CoffeBot.Endpoints.EventSubEndpoints;
 
 Env.Load();
 
@@ -16,6 +18,8 @@ builder.Configuration.AddEnvironmentVariables();
 
 // Options & Http clients
 builder.Services.Configure<KickOptions>(builder.Configuration.GetSection("Kick"));
+builder.Services.Configure<KickChatOptions>(builder.Configuration.GetSection("KickChat"));
+builder.Services.Configure<KickEventOptions>(builder.Configuration.GetSection("KickEvent"));
 builder.Services.AddKickHttpClients();
 
 // Session
@@ -34,6 +38,9 @@ builder.Services.AddUsersFeature();
 
 // If Chat DI isn’t included in the features yet:
 builder.Services.AddScoped<IChatApiClient, ChatApiClient>();
+builder.Services.AddSingleton<IChatListener, ChatListener>();
+builder.Services.AddScoped<IEventSubClient, EventSubClient>();
+builder.Services.AddSingleton<KickWebhookVerifier>();
 
 var app = builder.Build();
 app.UseSession();
@@ -51,6 +58,8 @@ app.MapGet("/", (HttpContext ctx) =>
                                <p><a href="/login">Login</a> |
                                   <a href="/users/me">/users/me</a> |
                                   <a href="/chat">/chat</a> |
+                                  <a href="/chat/listen">/chat/listen</a> |
+                                  <a href="/events">/events</a> |
                                   <a href="/logout">Logout</a></p>
                              </body></html>
                              """, "text/html");
@@ -63,6 +72,8 @@ MeEndpoints.MapUserEndpoints(app);
 // Bring Chat from legacy with the alias:
 ChatEndpoints.MapChatEndpoints(app);
 KickApiEndpoints.MapKickProxyEndpoints(app);
+ChatListenEndpoints.MapChatListenEndpoints(app);
+EventSubEndpoints.MapEventSubEndpoints(app);
 
 var listenUrl = Environment.GetEnvironmentVariable("APP__ListenUrl");
 if (!string.IsNullOrWhiteSpace(listenUrl)) app.Run(listenUrl);

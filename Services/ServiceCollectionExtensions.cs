@@ -9,6 +9,7 @@ public static class ServiceCollectionExtensions
     {
         services.AddSingleton<ITokenStore, SessionTokenStore>();
         services.AddScoped<ITokenService, TokenService>();
+        services.AddScoped<IKickApiClient, KickApiClient>();
         services.AddScoped<IUserApiClient, UserApiClient>();
         return services;
     }

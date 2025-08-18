@@ -59,6 +59,7 @@ builder.Services.AddSingleton<IChatApiClient, ChatApiClient>();
 builder.Services.AddSingleton<IChatListener, ChatListener>();
 builder.Services.AddScoped<IEventSubClient, EventSubClient>();
 builder.Services.AddSingleton<KickWebhookVerifier>();
+builder.Services.AddSingleton<IChatEventStream, ChatEventStream>();
 
 var app = builder.Build();
 app.UseHttpLogging();

@@ -33,8 +33,15 @@ public static class EventSubEndpoints
 
             var me = await users.GetCurrentAsync(access, ct);
             var cfg = opt.Value;
-            await client.SubscribeToChatAsync(access, me.Id, cfg.CallbackUrl, cfg.WebhookSecret, ct);
-            return Results.Ok(new { subscribed = true });
+            try
+            {
+                await client.SubscribeToChatAsync(access, me.Id, cfg.CallbackUrl, cfg.WebhookSecret, ct);
+                return Results.Ok(new { subscribed = true });
+            }
+            catch (HttpRequestException ex)
+            {
+                return Results.Problem(ex.Message, statusCode: 502);
+            }
         });
 
         // Verification challenge

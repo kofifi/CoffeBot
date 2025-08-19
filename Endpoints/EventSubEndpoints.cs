@@ -4,6 +4,7 @@ using CoffeBot.Abstractions;
 using CoffeBot.Models;
 using CoffeBot.Options;
 using CoffeBot.Services;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Logging;
 
@@ -181,6 +182,8 @@ public static class EventSubEndpoints
             IOptions<KickEventOptions> opt,
             IChatApiClient chatApi,
             IChatEventStream stream,
+            ITokenStore store,
+            ITokenService tokens,
             ILoggerFactory loggerFactory,
             CancellationToken ct) =>
         {
@@ -200,7 +203,7 @@ public static class EventSubEndpoints
                 return Results.Unauthorized();
             }
 
-            return await HandleWebhookBody(body, opt, chatApi, stream, logger, ct);
+            return await HandleWebhookBody(body, opt, chatApi, stream, store, tokens, req.HttpContext, logger, ct);
         });
 
         // Testowy webhook bez weryfikacji podpisu
@@ -209,6 +212,8 @@ public static class EventSubEndpoints
             IOptions<KickEventOptions> opt,
             IChatApiClient chatApi,
             IChatEventStream stream,
+            ITokenStore store,
+            ITokenService tokens,
             ILoggerFactory loggerFactory,
             CancellationToken ct) =>
         {
@@ -216,7 +221,7 @@ public static class EventSubEndpoints
             using var reader = new StreamReader(req.Body);
             var body = await reader.ReadToEndAsync();
             logger.LogInformation("Webhook TEST body: {Body}", body);
-            return await HandleWebhookBody(body, opt, chatApi, stream, logger, ct);
+            return await HandleWebhookBody(body, opt, chatApi, stream, store, tokens, req.HttpContext, logger, ct);
         });
 
         return app;
@@ -228,6 +233,9 @@ public static class EventSubEndpoints
         IOptions<KickEventOptions> opt,
         IChatApiClient chatApi,
         IChatEventStream stream,
+        ITokenStore store,
+        ITokenService tokens,
+        HttpContext ctx,
         ILogger logger,
         CancellationToken ct)
     {
@@ -256,20 +264,38 @@ public static class EventSubEndpoints
         if (content.StartsWith("!coffebot", StringComparison.OrdinalIgnoreCase))
         {
             var cfg = opt.Value;
-            try
+            var (access, refresh) = store.Read(ctx);
+            if (access is null && refresh is not null)
             {
-                await chatApi.SendAsync(
-                    cfg.BotAccessToken,
-                    new ChatSendCommand(
-                        "Im coffe bot what can i help you?",
-                        "bot",
-                        cfg.ChannelId),
-                    ct);
-                logger.LogInformation("Bot message sent via Kick API");
+                var refreshed = await tokens.RefreshAsync(refresh, ct);
+                if (refreshed is not null)
+                {
+                    access = refreshed.access_token;
+                    store.Save(ctx, access!, refreshed.refresh_token);
+                }
             }
-            catch (HttpRequestException ex)
+
+            if (access is not null)
             {
-                logger.LogError(ex, "Failed to send bot response");
+                try
+                {
+                    await chatApi.SendAsync(
+                        access,
+                        new ChatSendCommand(
+                            "Im coffe bot what can i help you?",
+                            "bot",
+                            cfg.ChannelId),
+                        ct);
+                    logger.LogInformation("Bot message sent via Kick API");
+                }
+                catch (HttpRequestException ex)
+                {
+                    logger.LogError(ex, "Failed to send bot response");
+                }
+            }
+            else
+            {
+                logger.LogWarning("No access token available for bot response");
             }
         }
 

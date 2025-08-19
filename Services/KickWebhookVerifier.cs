@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.Json;
 using CoffeBot.Options;
 using Microsoft.Extensions.Options;
+using Microsoft.AspNetCore.Http;
 
 namespace CoffeBot.Services;
 
@@ -19,32 +20,65 @@ public sealed class KickWebhookVerifier
         _kick = kick.Value;
     }
 
-    private async Task<RSA> GetPublicKeyAsync(CancellationToken ct)
+    private static RSA ParsePublicKey(string pem)
     {
-        if (_publicKey is not null) return _publicKey;
-        var content = await _http.GetStringAsync($"{_kick.ApiBase.TrimEnd('/')}/public/v1/public-key", ct);
-        string pem = content;
+        if (string.IsNullOrWhiteSpace(pem))
+            throw new InvalidOperationException("Klucz publiczny jest pusty!");
+
+        if (!pem.Contains("-----BEGIN PUBLIC KEY-----") || !pem.Contains("-----END PUBLIC KEY-----"))
+            throw new InvalidOperationException($"Nieprawidłowy format PEM klucza publicznego:\n{pem}");
 
         try
         {
+            var rsa = RSA.Create();
+            rsa.ImportFromPem(pem);
+            return rsa;
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException($"Błąd podczas importu PEM: {ex.Message}\nPEM:\n{pem}", ex);
+        }
+    }
+
+    private async Task<RSA> GetPublicKeyAsync(CancellationToken ct)
+    {
+        if (_publicKey is not null) return _publicKey;
+
+        var content = await _http.GetStringAsync($"{_kick.ApiBase.TrimEnd('/')}/public/v1/public-key", ct);
+        Console.WriteLine("Kick public key response:\n" + content);
+
+        string pem = null!;
+        try
+        {
             using var doc = JsonDocument.Parse(content);
-            if (doc.RootElement.TryGetProperty("public_key", out var pk) ||
-                doc.RootElement.TryGetProperty("publicKey", out pk))
+            var root = doc.RootElement;
+
+            if (root.TryGetProperty("data", out var dataEl) &&
+                dataEl.TryGetProperty("public_key", out var pk))
             {
-                var value = pk.GetString();
-                if (!string.IsNullOrWhiteSpace(value))
-                    pem = value;
+                pem = pk.GetString() ?? throw new InvalidOperationException("Brak klucza publicznego w odpowiedzi.");
+            }
+            else if (root.TryGetProperty("public_key", out var pk2) ||
+                     root.TryGetProperty("publicKey", out pk2))
+            {
+                pem = pk2.GetString() ?? throw new InvalidOperationException("Brak klucza publicznego w odpowiedzi.");
+            }
+            else
+            {
+                throw new InvalidOperationException("Brak klucza publicznego w odpowiedzi.");
             }
         }
         catch (JsonException)
         {
-            // Response was not JSON; assume it already contains PEM formatted key
+            // Jeśli nie jest to JSON, sprawdź czy to czysty PEM
+            if (content.Contains("-----BEGIN PUBLIC KEY-----"))
+                pem = content.Trim();
+            else
+                throw new InvalidOperationException("Nieprawidłowy format odpowiedzi z Kick API:\n" + content);
         }
 
-        var rsa = RSA.Create();
-        rsa.ImportFromPem(pem);
-        _publicKey = rsa;
-        return rsa;
+        _publicKey = ParsePublicKey(pem);
+        return _publicKey;
     }
 
     public async Task<bool> VerifyAsync(HttpRequest req, string body, CancellationToken ct = default)
@@ -53,13 +87,13 @@ public sealed class KickWebhookVerifier
         if (!req.Headers.TryGetValue("Kick-Event-Message-Id", out var idValues)) return false;
         if (!req.Headers.TryGetValue("Kick-Event-Message-Timestamp", out var tsValues)) return false;
 
-        var payload = $"{idValues}.{tsValues}.{body}";
+        var payload = $"{idValues.FirstOrDefault()}.{tsValues.FirstOrDefault()}.{body}";
         var rsa = await GetPublicKeyAsync(ct);
 
         byte[] signature;
         try
         {
-            signature = Convert.FromBase64String(sigValues.ToString());
+            signature = Convert.FromBase64String(sigValues.FirstOrDefault() ?? string.Empty);
         }
         catch (FormatException)
         {
@@ -68,6 +102,13 @@ public sealed class KickWebhookVerifier
 
         var hash = SHA256.HashData(Encoding.UTF8.GetBytes(payload));
 
-        return rsa.VerifyHash(hash, signature, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
+        try
+        {
+            return rsa.VerifyHash(hash, signature, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
+        }
+        catch (CryptographicException)
+        {
+            return false;
+        }
     }
 }

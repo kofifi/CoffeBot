@@ -256,19 +256,21 @@ public static class EventSubEndpoints
         if (content.StartsWith("!coffebot", StringComparison.OrdinalIgnoreCase))
         {
             var cfg = opt.Value;
-            var apiUrl = "https://api.kick.com/chat";
-            var payload = new
+            try
             {
-                content = "Im coffe bot what can i help you?",
-                // Dodaj inne wymagane pola zgodnie z dokumentacją Kick, np. channel_id
-                channel_id = cfg.ChannelId
-            };
-            var json = JsonSerializer.Serialize(payload);
-            using var http = new HttpClient();
-            http.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", cfg.BotAccessToken);
-            var resp = await http.PostAsync(apiUrl, new StringContent(json, Encoding.UTF8, "application/json"), ct);
-            resp.EnsureSuccessStatusCode();
-            logger.LogInformation("Bot message sent via Kick API: {StatusCode}", resp.StatusCode);
+                await chatApi.SendAsync(
+                    cfg.BotAccessToken,
+                    new ChatSendCommand(
+                        "Im coffe bot what can i help you?",
+                        "bot",
+                        cfg.ChannelId),
+                    ct);
+                logger.LogInformation("Bot message sent via Kick API");
+            }
+            catch (HttpRequestException ex)
+            {
+                logger.LogError(ex, "Failed to send bot response");
+            }
         }
 
         return Results.Ok(new { ok = true, type = "chat.message.sent" });
